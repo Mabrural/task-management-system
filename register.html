@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Task Management System</title>
+    <link rel="stylesheet" href="assets/css/auth.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h1>📝 Buat Akun</h1>
+                <p>Daftar untuk mulai mengelola tasks</p>
+            </div>
+            
+            <form id="registerForm" class="auth-form">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        name="email" 
+                        required 
+                        placeholder="Masukkan email Anda"
+                        autocomplete="email"
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        name="password" 
+                        required 
+                        placeholder="Minimal 6 karakter"
+                        minlength="6"
+                        autocomplete="new-password"
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <label for="confirmPassword">Konfirmasi Password</label>
+                    <input 
+                        type="password" 
+                        id="confirmPassword" 
+                        name="confirmPassword" 
+                        required 
+                        placeholder="Masukkan ulang password"
+                        minlength="6"
+                        autocomplete="new-password"
+                    >
+                </div>
+                
+                <button type="submit" class="btn btn-primary btn-block">
+                    Daftar
+                </button>
+                
+                <div class="auth-footer">
+                    <p>Sudah punya akun? <a href="login.html">Login disini</a></p>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script type="module">
+        import authService from './assets/js/auth.js';
+        import { showNotification } from './assets/js/utils.js';
+
+        const registerForm = document.getElementById('registerForm');
+        
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            
+            // Validasi password
+            if (password !== confirmPassword) {
+                showNotification('Password dan konfirmasi password tidak cocok!', 'error');
+                return;
+            }
+            
+            if (password.length < 6) {
+                showNotification('Password minimal 6 karakter!', 'error');
+                return;
+            }
+            
+            // Disable button saat loading
+            const submitBtn = registerForm.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Loading...';
+            
+            try {
+                await authService.register(email, password);
+            } catch (error) {
+                console.error('Registration failed:', error);
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Daftar';
+            }
+        });
+    </script>
+</body>
+</html>

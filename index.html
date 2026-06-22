@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Management System</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+    <div id="app">
+        <div class="container" style="text-align: center; padding: 100px 20px;">
+            <h1>Task Management System</h1>
+            <p>Redirecting...</p>
+        </div>
+    </div>
+
+    <script type="module">
+        import { redirectTo } from './assets/js/utils.js';
+        
+        // Cek status login
+        const isLoggedIn = localStorage.getItem('isLoggedIn');
+        
+        if (isLoggedIn === 'true') {
+            redirectTo('dashboard.html');
+        } else {
+            redirectTo('login.html');
+        }
+    </script>
+</body>
+</html>
