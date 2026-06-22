@@ -2,10 +2,7 @@
 // ============================================
 // FILE: task.js
 // FUNGSI: CRUD operations untuk tasks collection
-// ANALOGI LARAVEL: Seperti TaskController + Task Model
-// COLLECTION = TABLE: 'tasks'
-// DOCUMENT = ROW: Satu task
-// FIELD = COLUMN: title, description, status, dll
+// VERSI: Tanpa composite index (untuk development)
 // ============================================
 
 import { db } from './firebase.js';
@@ -21,25 +18,18 @@ import {
     where, 
     orderBy, 
     limit,
-    Timestamp,
     serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-import { generateId } from './utils.js';
+import { showNotification } from './utils.js';
 
 class TaskService {
     constructor() {
-        // Nama collection di Firestore
-        // Analogi: Nama table di database MySQL
         this.collectionName = 'tasks';
-        
-        // Reference ke collection
-        // Analogi: DB::table('tasks') di Laravel
         this.tasksRef = collection(db, this.collectionName);
     }
 
     // ============================================
     // CREATE TASK
-    // Analogi: Task::create($request->all())
     // ============================================
     async createTask(taskData) {
         try {
@@ -48,25 +38,28 @@ class TaskService {
                 throw new Error('Judul task wajib diisi!');
             }
 
+            if (!taskData.user_id) {
+                throw new Error('User ID tidak valid!');
+            }
+
             // Siapkan data task
-            // Analogi: Menyiapkan array $data sebelum insert
             const task = {
                 title: taskData.title.trim(),
                 description: taskData.description ? taskData.description.trim() : '',
                 status: taskData.status || 'Pending',
                 priority: taskData.priority || 'Medium',
-                user_id: taskData.user_id, // Firebase UID
-                created_at: serverTimestamp(), // Timestamp Firestore
+                user_id: taskData.user_id,
+                created_at: serverTimestamp(),
                 updated_at: serverTimestamp()
             };
 
+            console.log('Creating task:', task);
+
             // Insert ke Firestore
-            // Analogi: INSERT INTO tasks (fields) VALUES (values)
             const docRef = await addDoc(this.tasksRef, task);
             
             console.log('Task created with ID:', docRef.id);
             
-            // Kembalikan data task dengan ID
             return {
                 id: docRef.id,
                 ...task
@@ -78,78 +71,104 @@ class TaskService {
     }
 
     // ============================================
-    // READ ALL TASKS (dengan filter & sorting)
-    // Analogi: Task::where()->orderBy()->get()
+    // READ ALL TASKS - VERSI TANPA COMPOSITE INDEX
     // ============================================
     async getTasks(userId, filters = {}) {
         try {
-            // Buat query dasar
-            // Analogi: DB::table('tasks')->where('user_id', $userId)
-            let tasksQuery = query(
+            console.log('getTasks called with userId:', userId);
+            console.log('Filters:', filters);
+            
+            if (!userId) {
+                console.error('No userId provided');
+                return [];
+            }
+
+            // GUNAKAN QUERY SEDERHANA - HANYA WHERE USER_ID
+            // Untuk menghindari composite index
+            const q = query(
                 this.tasksRef,
                 where('user_id', '==', userId)
+                // Tidak pakai orderBy dulu
             );
 
-            // Filter berdasarkan status (jika ada)
-            // Analogi: ->where('status', $status)
-            if (filters.status && filters.status !== 'All') {
-                tasksQuery = query(
-                    tasksQuery,
-                    where('status', '==', filters.status)
-                );
-            }
-
-            // Filter berdasarkan priority (jika ada)
-            // Analogi: ->where('priority', $priority)
-            if (filters.priority) {
-                tasksQuery = query(
-                    tasksQuery,
-                    where('priority', '==', filters.priority)
-                );
-            }
-
-            // Sorting berdasarkan created_at
-            // Analogi: ->orderBy('created_at', 'desc')
-            if (filters.sortBy === 'oldest') {
-                tasksQuery = query(tasksQuery, orderBy('created_at', 'asc'));
-            } else {
-                // Default: terbaru dulu
-                tasksQuery = query(tasksQuery, orderBy('created_at', 'desc'));
-            }
-
+            console.log('Executing query...');
+            
             // Eksekusi query
-            // Analogi: ->get() di Laravel
-            const querySnapshot = await getDocs(tasksQuery);
+            const querySnapshot = await getDocs(q);
+            
+            console.log('Documents found:', querySnapshot.size);
             
             // Map hasil query ke array
-            // Analogi: Mengubah Collection menjadi Array
-            const tasks = [];
+            let tasks = [];
             querySnapshot.forEach((doc) => {
                 tasks.push({
-                    id: doc.id, // Document ID = Primary Key
-                    ...doc.data() // Data fields
+                    id: doc.id,
+                    ...doc.data()
                 });
             });
 
+            // Lakukan filter dan sorting di client-side (JavaScript)
+            // Ini menghindari kebutuhan composite index
+            
+            // Filter by status
+            if (filters.status && filters.status !== 'All') {
+                console.log('Filtering by status:', filters.status);
+                tasks = tasks.filter(task => task.status === filters.status);
+            }
+
+            // Filter by priority
+            if (filters.priority) {
+                console.log('Filtering by priority:', filters.priority);
+                tasks = tasks.filter(task => task.priority === filters.priority);
+            }
+
+            // Sort by created_at
+            console.log('Sorting by:', filters.sortBy || 'newest');
+            tasks.sort((a, b) => {
+                const timeA = a.created_at?.toDate?.() || new Date(a.created_at);
+                const timeB = b.created_at?.toDate?.() || new Date(b.created_at);
+                
+                if (filters.sortBy === 'oldest') {
+                    return timeA - timeB;
+                } else {
+                    // Default: terbaru dulu
+                    return timeB - timeA;
+                }
+            });
+
+            console.log('Tasks after filter/sort:', tasks.length);
+            
             return tasks;
         } catch (error) {
             console.error('Error getting tasks:', error);
+            
+            // Jika error tentang index, beri pesan yang lebih jelas
+            if (error.message && error.message.includes('index')) {
+                console.warn('PERHATIAN: Firestore membutuhkan composite index.');
+                console.warn('Silakan buka link yang diberikan di error untuk membuat index.');
+                console.warn('Atau gunakan versi kode ini yang melakukan filter di client-side.');
+            }
+            
             throw error;
         }
     }
 
     // ============================================
     // READ SINGLE TASK
-    // Analogi: Task::find($id)
     // ============================================
     async getTaskById(taskId) {
         try {
-            // Reference ke document spesifik
-            // Analogi: DB::table('tasks')->where('id', $taskId)->first()
+            if (!taskId) {
+                throw new Error('Task ID tidak valid!');
+            }
+
+            console.log('Getting task by ID:', taskId);
+            
             const docRef = doc(db, this.collectionName, taskId);
             const docSnap = await getDoc(docRef);
             
             if (docSnap.exists()) {
+                console.log('Task found:', docSnap.data());
                 return {
                     id: docSnap.id,
                     ...docSnap.data()
@@ -165,24 +184,25 @@ class TaskService {
 
     // ============================================
     // UPDATE TASK
-    // Analogi: Task::find($id)->update($data)
     // ============================================
     async updateTask(taskId, updateData) {
         try {
-            // Reference ke document yang akan diupdate
+            if (!taskId) {
+                throw new Error('Task ID tidak valid!');
+            }
+
+            console.log('Updating task:', taskId, updateData);
+            
             const docRef = doc(db, this.collectionName, taskId);
             
-            // Siapkan data update
             const data = {
                 ...updateData,
-                updated_at: serverTimestamp() // Update timestamp
+                updated_at: serverTimestamp()
             };
 
-            // Update document
-            // Analogi: UPDATE tasks SET field=value WHERE id=$id
             await updateDoc(docRef, data);
             
-            console.log('Task updated:', taskId);
+            console.log('Task updated successfully');
             return true;
         } catch (error) {
             console.error('Error updating task:', error);
@@ -192,18 +212,19 @@ class TaskService {
 
     // ============================================
     // DELETE TASK
-    // Analogi: Task::find($id)->delete()
     // ============================================
     async deleteTask(taskId) {
         try {
-            // Reference ke document yang akan dihapus
-            const docRef = doc(db, this.collectionName, taskId);
+            if (!taskId) {
+                throw new Error('Task ID tidak valid!');
+            }
+
+            console.log('Deleting task:', taskId);
             
-            // Hapus document
-            // Analogi: DELETE FROM tasks WHERE id=$id
+            const docRef = doc(db, this.collectionName, taskId);
             await deleteDoc(docRef);
             
-            console.log('Task deleted:', taskId);
+            console.log('Task deleted successfully');
             return true;
         } catch (error) {
             console.error('Error deleting task:', error);
@@ -213,10 +234,20 @@ class TaskService {
 
     // ============================================
     // GET TASK STATISTICS
-    // Mengambil statistik untuk dashboard
     // ============================================
     async getTaskStatistics(userId) {
         try {
+            console.log('Getting statistics for user:', userId);
+            
+            if (!userId) {
+                return {
+                    total: 0,
+                    pending: 0,
+                    inProgress: 0,
+                    completed: 0
+                };
+            }
+
             // Get all tasks untuk user ini
             const tasks = await this.getTasks(userId);
             
@@ -228,16 +259,22 @@ class TaskService {
                 completed: tasks.filter(t => t.status === 'Completed').length
             };
             
+            console.log('Statistics:', statistics);
+            
             return statistics;
         } catch (error) {
             console.error('Error getting statistics:', error);
-            throw error;
+            return {
+                total: 0,
+                pending: 0,
+                inProgress: 0,
+                completed: 0
+            };
         }
     }
 
     // ============================================
     // SEARCH TASKS (Client-side)
-    // Karena Firestore tidak support full-text search native
     // ============================================
     searchTasks(tasks, searchTerm) {
         if (!searchTerm || searchTerm.trim() === '') {
@@ -248,8 +285,8 @@ class TaskService {
         
         return tasks.filter(task => {
             return (
-                task.title.toLowerCase().includes(term) ||
-                task.description.toLowerCase().includes(term)
+                (task.title && task.title.toLowerCase().includes(term)) ||
+                (task.description && task.description.toLowerCase().includes(term))
             );
         });
     }

@@ -5,26 +5,86 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Task Management System</title>
     <link rel="stylesheet" href="assets/css/style.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .welcome-container {
+            text-align: center;
+            color: white;
+            padding: 40px;
+        }
+        .welcome-container h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            animation: fadeInUp 0.8s ease;
+        }
+        .welcome-container p {
+            font-size: 20px;
+            margin-bottom: 30px;
+            opacity: 0.9;
+            animation: fadeInUp 0.8s ease 0.2s both;
+        }
+        .loader {
+            display: inline-block;
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
 </head>
 <body>
-    <div id="app">
-        <div class="container" style="text-align: center; padding: 100px 20px;">
-            <h1>Task Management System</h1>
-            <p>Redirecting...</p>
-        </div>
+    <div class="welcome-container">
+        <h1>📋 Task Management System</h1>
+        <p>Professional Task Manager</p>
+        <div class="loader"></div>
+        <p style="margin-top: 20px; font-size: 16px;">Memeriksa session...</p>
     </div>
 
     <script type="module">
         import { redirectTo } from './assets/js/utils.js';
         
-        // Cek status login
+        // Cek status login dari localStorage
         const isLoggedIn = localStorage.getItem('isLoggedIn');
+        const userId = localStorage.getItem('userId');
         
-        if (isLoggedIn === 'true') {
-            redirectTo('dashboard.html');
-        } else {
-            redirectTo('login.html');
-        }
+        console.log('Checking session...');
+        console.log('isLoggedIn:', isLoggedIn);
+        console.log('userId:', userId);
+        
+        // Delay untuk memastikan Firebase auth siap
+        setTimeout(() => {
+            if (isLoggedIn === 'true' && userId) {
+                console.log('User logged in, redirecting to dashboard...');
+                redirectTo('dashboard.html');
+            } else {
+                console.log('No session, redirecting to login...');
+                redirectTo('login.html');
+            }
+        }, 2000);
     </script>
 </body>
 </html>

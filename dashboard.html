@@ -30,22 +30,21 @@
                 <div class="user-info">
                     <div class="user-avatar">👤</div>
                     <div class="user-details">
-                        <span id="userEmail">user@email.com</span>
+                        <span id="userEmail">Loading...</span>
                     </div>
                 </div>
                 <button id="logoutBtn" class="btn btn-danger btn-sm btn-block">
-                    Logout
+                    🚪 Logout
                 </button>
             </div>
         </aside>
 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Navbar -->
             <header class="navbar">
                 <h1>Dashboard</h1>
                 <div class="navbar-actions">
-                    <button id="refreshBtn" class="btn btn-primary">
+                    <button id="refreshBtn" class="btn btn-secondary">
                         🔄 Refresh
                     </button>
                 </div>
@@ -53,32 +52,36 @@
 
             <!-- Dashboard Stats -->
             <div class="dashboard-stats" id="dashboardStats">
-                <!-- Stats akan dirender oleh JavaScript -->
+                <div class="stat-card">
+                    <p>Loading statistics...</p>
+                </div>
             </div>
 
             <!-- Recent Tasks -->
-            <div class="card">
+            <div class="card" style="margin: 0 20px 20px;">
                 <div class="card-header">
                     <h3>Task Terbaru</h3>
                     <a href="pages/tasks.html" class="btn btn-primary btn-sm">Lihat Semua</a>
                 </div>
                 <div class="card-body">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>No</th>
-                                <th>Judul</th>
-                                <th>Status</th>
-                                <th>Priority</th>
-                                <th>Dibuat</th>
-                            </tr>
-                        </thead>
-                        <tbody id="recentTasksTableBody">
-                            <tr>
-                                <td colspan="5" style="text-align: center;">Loading...</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>No</th>
+                                    <th>Judul</th>
+                                    <th>Status</th>
+                                    <th>Priority</th>
+                                    <th>Dibuat</th>
+                                </tr>
+                            </thead>
+                            <tbody id="taskTableBody">
+                                <tr>
+                                    <td colspan="5" style="text-align: center;">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </main>
@@ -89,7 +92,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3 id="modalTitle">Tambah Task</h3>
-                <button class="modal-close" onclick="ui.hideTaskModal()">&times;</button>
+                <button class="modal-close" onclick="document.getElementById('taskModal').style.display='none'">&times;</button>
             </div>
             <div class="modal-body">
                 <form id="taskForm">
@@ -127,7 +130,7 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="ui.hideTaskModal()">Batal</button>
+                <button class="btn btn-secondary" onclick="document.getElementById('taskModal').style.display='none'">Batal</button>
                 <button class="btn btn-primary" id="saveTaskBtn">Simpan</button>
             </div>
         </div>
@@ -138,65 +141,96 @@
         <div class="modal-content modal-sm">
             <div class="modal-header">
                 <h3>Konfirmasi Hapus</h3>
-                <button class="modal-close" onclick="ui.hideConfirmModal()">&times;</button>
+                <button class="modal-close" onclick="document.getElementById('confirmModal').style.display='none'">&times;</button>
             </div>
             <div class="modal-body">
-                <p id="confirmMessage">Apakah Anda yakin ingin menghapus task ini?</p>
+                <p id="confirmMessage"></p>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="ui.hideConfirmModal()">Batal</button>
+                <button class="btn btn-secondary" onclick="document.getElementById('confirmModal').style.display='none'">Batal</button>
                 <button class="btn btn-danger" id="confirmDeleteBtn">Hapus</button>
             </div>
         </div>
     </div>
 
     <script type="module">
+        // ============================================
+        // DASHBOARD SCRIPT - VERSI PERBAIKAN
+        // ============================================
+        
         import authService from './assets/js/auth.js';
         import taskService from './assets/js/task.js';
         import ui from './assets/js/ui.js';
-        import { showNotification } from './assets/js/utils.js';
+        import { showNotification, debugLog } from './assets/js/utils.js';
 
-        // Buat global references untuk onclick handlers
-        window.ui = ui;
-        window.editTask = async (taskId) => {
-            try {
-                const task = await taskService.getTaskById(taskId);
-                ui.showTaskModal(task);
-            } catch (error) {
-                showNotification('Gagal memuat task!', 'error');
-            }
-        };
+        // Debug mode
+        localStorage.setItem('debug', 'true');
         
-        window.deleteTask = (taskId, taskTitle) => {
-            ui.showConfirmModal(taskId, taskTitle);
-        };
+        console.log('Dashboard script loaded');
 
         // ============================================
-        // Dashboard Initialization
+        // Fungsi untuk mendapatkan current user dengan aman
+        // ============================================
+        async function getCurrentUserSafely() {
+            // Tunggu auth siap
+            const user = await authService.waitForAuth();
+            
+            if (!user) {
+                console.error('No authenticated user found');
+                showNotification('Session tidak ditemukan. Silakan login ulang.', 'error');
+                
+                // Redirect ke login setelah delay
+                setTimeout(() => {
+                    window.location.href = 'login.html';
+                }, 2000);
+                
+                return null;
+            }
+            
+            console.log('Current user:', {
+                uid: user.uid,
+                email: user.email
+            });
+            
+            return user;
+        }
+
+        // ============================================
+        // Inisialisasi Dashboard
         // ============================================
         async function initDashboard() {
             try {
-                const user = authService.getCurrentUser();
-                if (!user) {
-                    showNotification('Silakan login terlebih dahulu!', 'warning');
-                    return;
+                console.log('Initializing dashboard...');
+                
+                // Get current user dengan aman
+                const user = await getCurrentUserSafely();
+                if (!user) return;
+                
+                // Update user info di sidebar
+                const userEmailEl = document.getElementById('userEmail');
+                if (userEmailEl) {
+                    userEmailEl.textContent = user.email;
                 }
-
-                // Update user info
-                ui.updateUserInfo(user.email);
-
+                
+                console.log('Loading statistics for user:', user.uid);
+                
                 // Load statistics
                 const stats = await taskService.getTaskStatistics(user.uid);
+                console.log('Statistics loaded:', stats);
                 ui.renderDashboardStats(stats);
-
-                // Load recent tasks (5 terbaru)
+                
+                // Load recent tasks
+                console.log('Loading recent tasks...');
                 const recentTasks = await taskService.getTasks(user.uid);
                 const recentFive = recentTasks.slice(0, 5);
+                console.log('Recent tasks loaded:', recentFive.length);
                 ui.renderTaskTable(recentFive);
-
+                
+                console.log('Dashboard initialization complete');
+                
             } catch (error) {
                 console.error('Dashboard initialization error:', error);
-                showNotification('Gagal memuat dashboard!', 'error');
+                showNotification('Gagal memuat dashboard: ' + error.message, 'error');
             }
         }
 
@@ -204,14 +238,14 @@
         // Event Listeners
         // ============================================
         
-        // Logout
+        // Logout button
         document.getElementById('logoutBtn')?.addEventListener('click', () => {
             if (confirm('Apakah Anda yakin ingin logout?')) {
                 authService.logout();
             }
         });
 
-        // Refresh Dashboard
+        // Refresh button
         document.getElementById('refreshBtn')?.addEventListener('click', () => {
             initDashboard();
             showNotification('Dashboard diperbarui!', 'success');
@@ -219,43 +253,77 @@
 
         // Save Task (Create/Update)
         document.getElementById('saveTaskBtn')?.addEventListener('click', async () => {
-            const taskId = document.getElementById('taskId').value;
-            const title = document.getElementById('title').value;
-            const description = document.getElementById('description').value;
-            const status = document.getElementById('status').value;
-            const priority = document.getElementById('priority').value;
-            const user = authService.getCurrentUser();
-
-            if (!title.trim()) {
-                showNotification('Judul task wajib diisi!', 'error');
-                return;
-            }
-
             try {
-                if (taskId) {
-                    // Update existing task
-                    await taskService.updateTask(taskId, {
-                        title,
-                        description,
-                        status,
-                        priority
-                    });
-                    showNotification('Task berhasil diupdate!', 'success');
-                } else {
-                    // Create new task
-                    await taskService.createTask({
-                        title,
-                        description,
-                        status,
-                        priority,
-                        user_id: user.uid
-                    });
-                    showNotification('Task berhasil dibuat!', 'success');
+                console.log('Save task button clicked');
+                
+                // Get form data
+                const taskId = document.getElementById('taskId').value;
+                const title = document.getElementById('title').value;
+                const description = document.getElementById('description').value;
+                const status = document.getElementById('status').value;
+                const priority = document.getElementById('priority').value;
+                
+                // Validasi
+                if (!title || !title.trim()) {
+                    showNotification('Judul task wajib diisi!', 'error');
+                    return;
                 }
-
-                ui.hideTaskModal();
-                initDashboard(); // Refresh dashboard
+                
+                // Get current user
+                const user = await getCurrentUserSafely();
+                if (!user) {
+                    showNotification('Session tidak valid. Silakan login ulang.', 'error');
+                    return;
+                }
+                
+                console.log('Saving task for user:', user.uid);
+                
+                // Disable save button selama proses
+                const saveBtn = document.getElementById('saveTaskBtn');
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Menyimpan...';
+                
+                try {
+                    if (taskId) {
+                        // Update existing task
+                        console.log('Updating task:', taskId);
+                        await taskService.updateTask(taskId, {
+                            title: title.trim(),
+                            description: description.trim(),
+                            status,
+                            priority
+                        });
+                        showNotification('Task berhasil diupdate!', 'success');
+                    } else {
+                        // Create new task
+                        console.log('Creating new task');
+                        const taskData = {
+                            title: title.trim(),
+                            description: description.trim(),
+                            status,
+                            priority,
+                            user_id: user.uid
+                        };
+                        console.log('Task data:', taskData);
+                        
+                        await taskService.createTask(taskData);
+                        showNotification('Task berhasil dibuat!', 'success');
+                    }
+                    
+                    // Hide modal
+                    document.getElementById('taskModal').style.display = 'none';
+                    
+                    // Refresh dashboard
+                    await initDashboard();
+                    
+                } finally {
+                    // Enable button kembali
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Simpan';
+                }
+                
             } catch (error) {
+                console.error('Error saving task:', error);
                 showNotification('Gagal menyimpan task: ' + error.message, 'error');
             }
         });
@@ -266,15 +334,48 @@
             
             if (taskId) {
                 try {
+                    console.log('Deleting task:', taskId);
                     await taskService.deleteTask(taskId);
                     showNotification('Task berhasil dihapus!', 'success');
-                    ui.hideConfirmModal();
-                    initDashboard(); // Refresh dashboard
+                    document.getElementById('confirmModal').style.display = 'none';
+                    await initDashboard();
                 } catch (error) {
+                    console.error('Error deleting task:', error);
                     showNotification('Gagal menghapus task!', 'error');
                 }
             }
         });
+
+        // Fungsi global untuk edit dan delete
+        window.editTask = async (taskId) => {
+            try {
+                console.log('Editing task:', taskId);
+                const task = await taskService.getTaskById(taskId);
+                
+                // Isi form
+                document.getElementById('taskId').value = task.id;
+                document.getElementById('title').value = task.title || '';
+                document.getElementById('description').value = task.description || '';
+                document.getElementById('status').value = task.status || 'Pending';
+                document.getElementById('priority').value = task.priority || 'Medium';
+                document.getElementById('modalTitle').textContent = 'Edit Task';
+                
+                // Tampilkan modal
+                document.getElementById('taskModal').style.display = 'block';
+                
+            } catch (error) {
+                console.error('Error loading task for edit:', error);
+                showNotification('Gagal memuat task!', 'error');
+            }
+        };
+        
+        window.deleteTask = (taskId, taskTitle) => {
+            console.log('Preparing to delete:', taskId, taskTitle);
+            document.getElementById('confirmMessage').textContent = 
+                `Apakah Anda yakin ingin menghapus task "${taskTitle}"?`;
+            document.getElementById('confirmDeleteBtn').setAttribute('data-task-id', taskId);
+            document.getElementById('confirmModal').style.display = 'block';
+        };
 
         // Close modals when clicking outside
         window.onclick = (event) => {
@@ -283,8 +384,39 @@
             }
         };
 
-        // Start dashboard
-        initDashboard();
+        // Tambah task button (jika ada)
+        const addTaskBtn = document.getElementById('addTaskBtn');
+        if (addTaskBtn) {
+            addTaskBtn.addEventListener('click', () => {
+                // Reset form
+                document.getElementById('taskForm').reset();
+                document.getElementById('taskId').value = '';
+                document.getElementById('modalTitle').textContent = 'Tambah Task Baru';
+                document.getElementById('taskModal').style.display = 'block';
+            });
+        }
+
+        // ============================================
+        // Start dashboard ketika auth sudah siap
+        // ============================================
+        window.addEventListener('authReady', (event) => {
+            console.log('Auth ready event received:', event.detail);
+            initDashboard();
+        });
+
+        // Juga jalankan langsung (sebagai fallback)
+        // Gunakan setTimeout untuk memastikan semua module loaded
+        setTimeout(() => {
+            if (authService.isAuthenticated()) {
+                console.log('User already authenticated, initializing...');
+                initDashboard();
+            } else {
+                console.log('Waiting for auth...');
+                // Auth listener akan menangani ini
+            }
+        }, 500);
+        
+        console.log('Dashboard script setup complete');
     </script>
 </body>
 </html>

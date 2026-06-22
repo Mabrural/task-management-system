@@ -11,7 +11,6 @@ import { getFirestore } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase
 import { getAuth } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 
 // Konfigurasi Firebase - GANTI DENGAN KONFIGURASI ANDA
-// Cara mendapatkan: Firebase Console -> Project Settings -> General -> Your apps -> Web app
 const firebaseConfig = {
     apiKey: "AIzaSyDOZ3JVIBdAS6rUdB9gwciQfoLQbX00pNo",
     authDomain: "task-management-system-2f0a7.firebaseapp.com",
@@ -22,17 +21,16 @@ const firebaseConfig = {
 };
 
 // Inisialisasi Firebase
-// Analogi: php artisan serve (menjalankan aplikasi Laravel)
 const app = initializeApp(firebaseConfig);
 
 // Inisialisasi Firestore (Database)
-// Analogi: DB::connection('mysql') di Laravel
 const db = getFirestore(app);
 
 // Inisialisasi Authentication
-// Analogi: Auth::class di Laravel
 const auth = getAuth(app);
 
 // Export untuk digunakan di file lain
-// Analogi: Service Provider binding di Laravel
 export { app, db, auth };
+
+// Export default untuk kemudahan akses
+export default { app, db, auth };

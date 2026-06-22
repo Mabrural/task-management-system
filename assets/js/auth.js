@@ -17,19 +17,25 @@ import { showNotification, redirectTo } from './utils.js';
 class AuthService {
     constructor() {
         this.currentUser = null;
+        this.authReady = false;
         this.initAuthListener();
     }
 
     // ============================================
     // Listener Status Authentication
-    // Analogi: Middleware auth di Laravel
     // ============================================
     initAuthListener() {
         onAuthStateChanged(auth, (user) => {
+            console.log('Auth state changed:', user ? user.email : 'No user');
+            
             if (user) {
                 // User sedang login
                 this.currentUser = user;
-                console.log('User logged in:', user.email);
+                console.log('User logged in:', {
+                    uid: user.uid,
+                    email: user.email,
+                    emailVerified: user.emailVerified
+                });
                 
                 // Simpan status login ke localStorage
                 localStorage.setItem('isLoggedIn', 'true');
@@ -37,15 +43,18 @@ class AuthService {
                 localStorage.setItem('userEmail', user.email);
                 
                 // Redirect ke dashboard jika di halaman auth
-                if (window.location.pathname.includes('login.html') || 
-                    window.location.pathname.includes('register.html') ||
-                    window.location.pathname === '/' ||
-                    window.location.pathname.includes('index.html')) {
+                const currentPath = window.location.pathname;
+                if (currentPath.includes('login.html') || 
+                    currentPath.includes('register.html') ||
+                    currentPath === '/' ||
+                    currentPath.endsWith('index.html')) {
                     redirectTo('dashboard.html');
                 }
             } else {
                 // User logout
                 this.currentUser = null;
+                console.log('User logged out');
+                
                 localStorage.removeItem('isLoggedIn');
                 localStorage.removeItem('userId');
                 localStorage.removeItem('userEmail');
@@ -58,23 +67,57 @@ class AuthService {
                     redirectTo('login.html');
                 }
             }
+            
+            this.authReady = true;
+            
+            // Trigger event untuk memberitahu bahwa auth sudah siap
+            window.dispatchEvent(new CustomEvent('authReady', { 
+                detail: { user: this.currentUser } 
+            }));
+        });
+    }
+
+    // ============================================
+    // Tunggu sampai auth siap
+    // ============================================
+    async waitForAuth() {
+        if (this.authReady) {
+            return this.currentUser;
+        }
+        
+        return new Promise((resolve) => {
+            const checkAuth = () => {
+                if (this.authReady) {
+                    resolve(this.currentUser);
+                } else {
+                    setTimeout(checkAuth, 100);
+                }
+            };
+            checkAuth();
         });
     }
 
     // ============================================
     // Register User
-    // Analogi: POST /register di AuthController
     // ============================================
     async register(email, password) {
         try {
+            console.log('Attempting to register:', email);
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            console.log('Registration successful:', userCredential.user.uid);
             showNotification('Registrasi berhasil! Silakan login.', 'success');
-            redirectTo('login.html');
+            
+            // Logout dulu setelah register agar user login manual
+            await signOut(auth);
+            
+            setTimeout(() => {
+                redirectTo('login.html');
+            }, 1500);
+            
             return userCredential.user;
         } catch (error) {
             console.error('Register error:', error);
             
-            // Handle error messages (Bahasa Indonesia)
             let errorMessage = 'Registrasi gagal!';
             switch (error.code) {
                 case 'auth/email-already-in-use':
@@ -85,6 +128,9 @@ class AuthService {
                     break;
                 case 'auth/weak-password':
                     errorMessage = 'Password minimal 6 karakter!';
+                    break;
+                case 'auth/network-request-failed':
+                    errorMessage = 'Gagal terhubung ke server. Periksa koneksi internet!';
                     break;
                 default:
                     errorMessage = error.message;
@@ -97,13 +143,26 @@ class AuthService {
 
     // ============================================
     // Login User
-    // Analogi: POST /login di AuthController
     // ============================================
     async login(email, password) {
         try {
+            console.log('Attempting to login:', email);
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            console.log('Login successful:', {
+                uid: userCredential.user.uid,
+                email: userCredential.user.email
+            });
+            
             showNotification('Login berhasil!', 'success');
-            redirectTo('dashboard.html');
+            
+            // Update currentUser immediately
+            this.currentUser = userCredential.user;
+            
+            // Redirect setelah delay singkat
+            setTimeout(() => {
+                redirectTo('dashboard.html');
+            }, 1000);
+            
             return userCredential.user;
         } catch (error) {
             console.error('Login error:', error);
@@ -122,6 +181,12 @@ class AuthService {
                 case 'auth/invalid-credential':
                     errorMessage = 'Email atau password salah!';
                     break;
+                case 'auth/too-many-requests':
+                    errorMessage = 'Terlalu banyak percobaan. Coba lagi nanti!';
+                    break;
+                case 'auth/network-request-failed':
+                    errorMessage = 'Gagal terhubung ke server. Periksa koneksi internet!';
+                    break;
                 default:
                     errorMessage = error.message;
             }
@@ -133,14 +198,18 @@ class AuthService {
 
     // ============================================
     // Logout User
-    // Analogi: POST /logout di AuthController
     // ============================================
     async logout() {
         try {
+            console.log('Logging out...');
             await signOut(auth);
+            this.currentUser = null;
             localStorage.clear();
             showNotification('Logout berhasil!', 'success');
-            redirectTo('login.html');
+            
+            setTimeout(() => {
+                redirectTo('login.html');
+            }, 1000);
         } catch (error) {
             console.error('Logout error:', error);
             showNotification('Logout gagal!', 'error');
@@ -148,22 +217,50 @@ class AuthService {
     }
 
     // ============================================
-    // Get Current User
-    // Analogi: Auth::user() di Laravel
+    // Get Current User (dengan fallback)
     // ============================================
     getCurrentUser() {
-        return this.currentUser || auth.currentUser;
+        // Coba dapatkan dari properti class
+        if (this.currentUser) {
+            console.log('Got user from class property:', this.currentUser.uid);
+            return this.currentUser;
+        }
+        
+        // Fallback ke Firebase auth instance
+        const firebaseUser = auth.currentUser;
+        if (firebaseUser) {
+            console.log('Got user from Firebase auth:', firebaseUser.uid);
+            this.currentUser = firebaseUser;
+            return firebaseUser;
+        }
+        
+        // Fallback ke localStorage (untuk kasus refresh)
+        const userId = localStorage.getItem('userId');
+        const userEmail = localStorage.getItem('userEmail');
+        if (userId && userEmail) {
+            console.log('Got user from localStorage:', userId);
+            return {
+                uid: userId,
+                email: userEmail
+            };
+        }
+        
+        console.warn('No user found in any source');
+        return null;
     }
 
     // ============================================
     // Check if user is authenticated
-    // Analogi: Auth::check() di Laravel
     // ============================================
     isAuthenticated() {
-        return this.currentUser !== null || auth.currentUser !== null;
+        const user = this.getCurrentUser();
+        return user !== null;
     }
 }
 
 // Export singleton instance
 const authService = new AuthService();
 export default authService;
+
+// Juga export untuk kemudahan akses
+export { authService };
